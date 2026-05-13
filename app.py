@@ -10,7 +10,7 @@ def get_transcript():
         return jsonify({"error": "No URL provided"}), 400
     
     try:
-        # Extract the 11-character video ID from standard or shortened links
+        # Extract Video ID
         video_id = ""
         if "v=" in url:
             video_id = url.split("v=")[1].split("&")[0][:11]
@@ -20,15 +20,28 @@ def get_transcript():
         if not video_id:
             return jsonify({"error": "Could not extract Video ID"}), 400
 
-        # Fetch the transcript
-        transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
-        
-        # Combine all the text chunks into one massive string
-        full_transcript = " ".join([chunk['text'] for chunk in transcript_list])
-        
-        return jsonify({"transcript": full_transcript})
-        
+        # ROBUST TRANSCRIPT FETCHING
+        try:
+            # Try standard English first
+            transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'en-US', 'en-GB'])
+            full_transcript = " ".join([chunk['text'] for chunk in transcript_list])
+            return jsonify({"transcript": full_transcript})
+            
+        except:
+            # If standard English fails, ask the API for ALL available transcripts
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            
+            # Loop through them and just grab the very first one we find
+            for transcript in transcript_list:
+                transcript_data = transcript.fetch()
+                full_transcript = " ".join([chunk['text'] for chunk in transcript_data])
+                return jsonify({"transcript": full_transcript})
+                
+            # If the loop finishes and nothing was found
+            return jsonify({"error": "Video has no closed captions available"}), 404
+
     except Exception as e:
+        # Catch any weird catastrophic errors
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
